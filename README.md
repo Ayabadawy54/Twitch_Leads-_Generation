@@ -2,11 +2,11 @@
 
 ## The "Speed to Lead" Problem
 
-In 2026, business agility is the ultimate competitive advantage. When a business identifies high-potential leads, serving them an offer at the exact moment of need is critical. Waiting hours or days results in lost opportunities.
+In 2026, business agility is the ultimate competitive advantage. When a business identifies high-potential leads, serving them an offer at the exact moment of need is critical. Waiting hours or day[...]
 
 ## Project Overview
 
-This automation engine scans live Twitch streams to identify creators that fit specific business criteria. It goes beyond basic API data by scraping profile HTML to find direct contact information and social presence indicators.
+This automation engine scans live Twitch streams to identify creators that fit specific business criteria. It goes beyond basic API data by scraping profile HTML to find direct contact information [...]
 
 ## Key Features
 
@@ -51,6 +51,14 @@ Top Branch: Fetches raw HTML profile data.
 Bottom Branch: Preserves core API metadata.
 
 Merge Node: Synchronizes both branches by index to create a unified lead profile.
+
+## Visualization
+
+### Workflow Flow Diagram
+![Workflow Architecture](./WorkFlow.jpg)
+
+### Sample Output Dashboard
+![Output Dashboard](./Output.jpeg)
 
 ## How to Use
 
