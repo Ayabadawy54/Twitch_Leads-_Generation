@@ -1,0 +1,395 @@
+{
+  "name": "Twitch Leads Generation V2",
+  "nodes": [
+    {
+      "parameters": {
+        "triggerTimes": {
+          "item": [
+            {
+              "mode": "everyHour"
+            }
+          ]
+        }
+      },
+      "name": "Cron",
+      "type": "n8n-nodes-base.cron",
+      "typeVersion": 1,
+      "position": [
+        -480,
+        -80
+      ],
+      "id": "63ff3522-878f-4595-a311-de3a4f77403b"
+    },
+    {
+      "parameters": {
+        "url": "https://api.twitch.tv/helix/streams",
+        "options": {},
+        "headerParametersUi": {
+          "parameter": [
+            {
+              "name": "Client-ID",
+              "value": "={{ $node[\"Edit Fields\"].json[\"Client-ID\"] }}"
+            },
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $node[\"Edit Fields\"].json[\"Authorization\"] }}"
+            }
+          ]
+        }
+      },
+      "name": "Get Streams",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 2,
+      "position": [
+        -64,
+        -80
+      ],
+      "id": "968ee490-c3c9-4364-8d91-7a3179adfbee"
+    },
+    {
+      "parameters": {
+        "functionCode": "return items[0].json.data.map(item => ({ json: item }));"
+      },
+      "name": "Split Streams",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        192,
+        -80
+      ],
+      "id": "d3b9bada-6302-4516-9c53-7b919b8d0526"
+    },
+    {
+      "parameters": {
+        "functionCode": "return items.map(item => {\n  const v = item.json.viewer_count;\n  let tier = \"\";\n\n  if (v < 100) tier = \"small\";\n  else if (v < 1000) tier = \"growing\";\n  else if (v < 10000) tier = \"established\";\n  else tier = \"top\";\n\n  item.json.tier = tier;\n  return item;\n});"
+      },
+      "name": "Assign Tier",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        624,
+        -80
+      ],
+      "id": "93c97b5a-c48c-483c-be1a-fc5c71f4975b"
+    },
+    {
+      "parameters": {
+        "url": "=https://www.twitch.tv/{{$json[\"user_login\"]}}",
+        "responseFormat": "string",
+        "options": {}
+      },
+      "name": "Get Profile HTML",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 2,
+      "position": [
+        1120,
+        -256
+      ],
+      "id": "dddb00b5-8bef-4a2a-838d-94f2673bbe57",
+      "retryOnFail": true,
+      "waitBetweenTries": 5000,
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "functionCode": "// Function (Version 1)\nreturn items.map(item => {\n  const html = item.json.body || \"\";\n  \n  // Extracting links using Regex\n  const links = html.match(/https?:\\/\\/[^\\s\"\\'<>]+/g) || [];\n  const find = (k) => links.find(l => l.includes(k)) || \"\";\n  \n  // Extracting an email if it exists in the bio\n  const emailMatch = html.match(/([a-zA-Z0-9._-]+@[a-zA-Z0-9._-]+\\.[a-zA-Z0-9._-]+)/gi);\n\n  // --- START LEAD SCORING CALCULATION ---\n  let score = 0;\n  if (find(\"youtube.com\")) score += 2;\n  if (find(\"tiktok.com\")) score += 2;\n  if (find(\"instagram.com\")) score += 1;\n  if (emailMatch) score += 5; // Direct contact is high value\n  if (item.json.viewer_count >= 100) score += 3;\n  if (item.json.tier === \"established\") score += 2;\n  // --- END LEAD SCORING CALCULATION ---\n\n  return {\n    json: {\n      name: item.json.user_name || \"N/A\",\n      login: item.json.user_login || \"N/A\",\n      game: item.json.game_name || \"N/A\",\n      viewers: item.json.viewer_count || 0,\n      tier: item.json.tier || \"N/A\",\n      started_at: item.json.started_at || \"\",\n      // Clean up Twitch thumbnail placeholder for a clean design\n      thumbnail: (item.json.thumbnail_url || \"\").replace('{width}', '320').replace('{height}', '180'),\n      bio: item.json.title || \"\", // Using title as the bio/description\n      email: emailMatch ? emailMatch[0].toLowerCase() : \"\",\n      youtube: find(\"youtube.com\"),\n      discord: find(\"discord.gg\"),\n      instagram: find(\"instagram.com\"),\n      tiktok: find(\"tiktok.com\"),\n      twitch: `https://twitch.tv/${item.json.user_login}`,\n      score: score // Added to output for the sheet\n    }\n  };\n});"
+      },
+      "name": "Extract Data",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1392,
+        -48
+      ],
+      "id": "f7f7948e-e869-4ff3-8174-77ab443c4dfa"
+    },
+    {
+      "parameters": {
+        "functionCode": "// Function (Version 1)\nreturn items.map(item => {\n  let score = 0;\n\n  // 1. Social Presence (Standard)\n  if (item.json.youtube) score += 2;\n  if (item.json.tiktok) score += 2;\n  if (item.json.instagram) score += 1;\n\n  // 2. Direct Contact (High Priority)\n  // If we found an email in the bio, it's a \"Hot\" lead\n  if (item.json.email && item.json.email.length > 0) score += 5;\n\n  // 3. Performance & Tier\n  if (item.json.viewers >= 50) score += 3;\n  else if (item.json.viewers >= 20) score += 2;\n\n  if (item.json.tier === 'established') score += 2;\n  if (item.json.tier === 'growing') score += 1;\n\n  // 4. Outreach Opportunity\n  // If they have no YouTube/TikTok, they are a prime target for content services\n  if (!item.json.youtube && !item.json.tiktok) score += 3;\n\n  item.json.score = score;\n  return item;\n});\n\n// Add bonus points for specific high-value games\nconst highValueGames = [\"League of Legends\", \"Valorant\", \"Just Chatting\"];\nif (highValueGames.includes(item.json.game)) {\n  score += 2;\n}"
+      },
+      "name": "Lead Scoring",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1632,
+        -48
+      ],
+      "id": "a7968f7d-f303-4744-a2e7-ce8fe61bf23f"
+    },
+    {
+      "parameters": {
+        "operation": "upsert",
+        "sheetId": "={{ $('Edit Fields').item.json['Spreadsheet ID'] }}",
+        "range": "Test1!B:P",
+        "dataStartRow": 2,
+        "keyRow": 1,
+        "key": "login",
+        "options": {}
+      },
+      "name": "Google Sheets",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 2,
+      "position": [
+        1824,
+        -48
+      ],
+      "id": "bdfe2c29-1850-41c1-9682-38d6f50f65bc",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "XFQFSj0LhemevHMe",
+          "name": "Google Sheets OAuth2 API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "fieldsToMatchString": "login",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        944,
+        160
+      ],
+      "id": "cb744636-33ae-45d5-a1f2-019bb34450c7",
+      "name": "Merge"
+    },
+    {
+      "parameters": {
+        "functionCode": "return items.filter(item => {\n  // Only return items where the language is exactly \"en\"\n  return item.json.language === \"en\";\n});"
+      },
+      "name": "Filter English",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        416,
+        -80
+      ],
+      "id": "36e91449-884b-437e-af22-763c61b83b18"
+    },
+    {
+      "parameters": {
+        "sendTo": "badawyaya54@gmail.com",
+        "subject": "=Twitch Leads Scraper Error: {{ $node[\"Assign Tier\"].json[\"user_name\"] }}",
+        "message": "Error at Get Profile HTML Node",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        1376,
+        -240
+      ],
+      "id": "5f4bdfa9-0f28-4c0e-ac53-79df176654d5",
+      "name": "Send a message",
+      "webhookId": "883d01c5-b39b-491f-874a-d486b0d1819a",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "KBJVPWKJfIqLlBj6",
+          "name": "Gmail OAuth2 API"
+        }
+      }
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        864,
+        -256
+      ],
+      "id": "4c39bb38-04e0-49d4-a537-283a4396928e",
+      "name": "Wait",
+      "webhookId": "f0d40508-b9e8-49b8-8d4f-77e42361e250"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "c81d41c0-9ff7-4285-adeb-7373c5ca2044",
+              "name": "Client-ID",
+              "value": "",
+              "type": "string"
+            },
+            {
+              "id": "f1bf75e2-02fd-402a-b9cc-97a6db3899ec",
+              "name": "Authorization",
+              "value": "",
+              "type": "string"
+            },
+            {
+              "id": "45b09492-99e9-49da-8a19-d27f806b22be",
+              "name": "Spreadsheet ID",
+              "value": "",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -272,
+        -80
+      ],
+      "id": "17a08874-cd58-4f88-9f47-bc5d147cdf85",
+      "name": "Edit Fields"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Cron": {
+      "main": [
+        [
+          {
+            "node": "Edit Fields",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Streams": {
+      "main": [
+        [
+          {
+            "node": "Split Streams",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split Streams": {
+      "main": [
+        [
+          {
+            "node": "Filter English",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Assign Tier": {
+      "main": [
+        [
+          {
+            "node": "Wait",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Get Profile HTML": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Send a message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Data": {
+      "main": [
+        [
+          {
+            "node": "Lead Scoring",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Lead Scoring": {
+      "main": [
+        [
+          {
+            "node": "Google Sheets",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge": {
+      "main": [
+        [
+          {
+            "node": "Extract Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filter English": {
+      "main": [
+        [
+          {
+            "node": "Assign Tier",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait": {
+      "main": [
+        [
+          {
+            "node": "Get Profile HTML",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Edit Fields": {
+      "main": [
+        [
+          {
+            "node": "Get Streams",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "timeSavedMode": "fixed",
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false,
+    "errorWorkflow": "3DA83RDg28BQmLBD"
+  },
+  "versionId": "0f423a5c-5272-458b-91c3-8a0ea955e187",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "cd434581e27edcf64e7822cfcead45028b1c477087e453a32f1246078522e59e"
+  },
+  "id": "tvyMxILTyjQuZM5Y",
+  "tags": []
+}
