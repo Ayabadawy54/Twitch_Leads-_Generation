@@ -2,11 +2,11 @@
 
 ## The "Speed to Lead" Problem
 
-In 2026, business agility is the ultimate competitive advantage. When a business identifies high-potential leads, serving them an offer at the exact moment of need is critical. Waiting hours or days results in lost opportunities. This project addresses the challenge of handling 10+ high-value leads per minute, transforming raw data into actionable outreach opportunities in real-time.
+In 2026, business agility is the ultimate competitive advantage. When a business identifies high-potential leads, serving them an offer at the exact moment of need is critical. Waiting hours or days results in lost opportunities.
 
 ## Project Overview
 
-This automation engine scans live Twitch streams to identify creators that fit specific business criteria. It goes beyond basic API data by scraping profile HTML to find direct contact information and social footprints, then scores each lead to prioritize outreach.
+This automation engine scans live Twitch streams to identify creators that fit specific business criteria. It goes beyond basic API data by scraping profile HTML to find direct contact information and social presence indicators.
 
 ## Key Features
 
@@ -54,13 +54,19 @@ Merge Node: Synchronizes both branches by index to create a unified lead profile
 
 ## How to Use
 
-Import: Download and import the Twitch_Lead_Gen_Flow.json file into your n8n instance.
+Import: Download and import the **Twitch Leads Generation V2.json** file into your n8n instance.
 
 Setup Credentials: Create and link your Twitch API and Google Sheets credentials.
 
 Configure Variables: Set your sheetId and twitchClientId in the "Edit Fields" (Setup) node.
 
 Activate: Turn on the workflow to begin real-time lead ingestion.
+
+## Project Artifacts
+
+- **Twitch Leads Generation V2.json**: The complete n8n workflow export
+- **WorkFlow.jpg**: Visual diagram of the workflow architecture
+- **Output.jpeg**: Sample output from the Google Sheets dashboard
 
 Special thanks to Eng. Kareem for the foundational automation insights and guidance throughout this project.
 
